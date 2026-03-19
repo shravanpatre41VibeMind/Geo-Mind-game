@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GeoMind – Country Guesser</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #1e1e2e;
+    --accent: #c8f135;
+    --accent2: #3df0c2;
+    --muted: #3a3a55;
+    --text: #e8e8f0;
+    --text-dim: #7a7a9a;
+    --red: #ff4d6d;
+    --gold: #ffd166;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,0.012) 2px,rgba(255,255,255,0.012) 4px);
+    pointer-events: none;
+    z-index: 999;
+  }
+  header {
+    width: 100%;
+    max-width: 800px;
+    padding: 2.5rem 2rem 0;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .logo { font-family: 'Syne', sans-serif; font-size: 2rem; font-weight: 800; letter-spacing: -1px; color: var(--accent); }
+  .logo span { color: var(--text-dim); font-weight: 400; }
+  .score-bar { display: flex; gap: 1.5rem; align-items: center; }
+  .score-item { text-align: right; }
+  .score-label { font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 2px; }
+  .score-value { font-family: 'Syne', sans-serif; font-size: 1.4rem; font-weight: 800; color: var(--accent); transition: color 0.3s; }
+  .score-value.gold { color: var(--gold); }
+  main { width: 100%; max-width: 800px; padding: 2rem; flex: 1; }
+  .game-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .game-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+  .round-tag { font-size: 0.65rem; letter-spacing: 3px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 1.5rem; }
+  .clues-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .clues-title { font-family: 'Syne', sans-serif; font-size: 0.8rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--accent2); }
+  .points-badge { font-size: 0.65rem; color: var(--text-dim); }
+  .points-badge span { color: var(--gold); font-weight: 700; }
+  .clue-list { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2rem; }
+  .clue-item {
+    display: flex; gap: 1rem; align-items: flex-start;
+    padding: 0.75rem 1rem;
+    border-left: 2px solid var(--muted);
+    background: rgba(255,255,255,0.02);
+    border-radius: 0 4px 4px 0;
+    animation: slideIn 0.4s ease;
+  }
+  .clue-item.new { border-left-color: var(--accent); animation: slideInGlow 0.5s ease; }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes slideInGlow {
+    from { opacity: 0; transform: translateX(-10px); box-shadow: -4px 0 20px var(--accent); }
+    to { opacity: 1; transform: translateX(0); box-shadow: none; }
+  }
+  .clue-num { font-size: 0.6rem; color: var(--text-dim); margin-top: 3px; flex-shrink: 0; min-width: 1.2rem; }
+  .clue-text { font-size: 0.9rem; line-height: 1.6; color: var(--text); }
+  .clue-deduction { margin-left: auto; flex-shrink: 0; font-size: 0.65rem; color: var(--red); font-style: italic; margin-top: 3px; }
+  .clue-locked {
+    display: flex; gap: 1rem; align-items: center;
+    padding: 0.75rem 1rem;
+    border-left: 2px dashed var(--muted);
+    background: rgba(255,255,255,0.01);
+    border-radius: 0 4px 4px 0;
+    color: var(--text-dim); font-size: 0.8rem; font-style: italic;
+  }
+  .input-row { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
+  .guess-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--muted);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.95rem;
+    padding: 0.75rem 1rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .guess-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(200,241,53,0.15); }
+  .guess-input::placeholder { color: var(--muted); }
+  .btn {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 0.75rem 1.25rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn-guess { background: var(--accent); color: #0a0a0f; }
+  .btn-guess:hover { background: #d9ff40; transform: translateY(-1px); }
+  .btn-guess:active { transform: translateY(0); }
+  .btn-hint { background: transparent; color: var(--accent2); border: 1px solid var(--accent2); }
+  .btn-hint:hover { background: rgba(61,240,194,0.08); }
+  .btn-hint:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+  .btn-skip { background: transparent; color: var(--text-dim); border: 1px solid var(--muted); font-size: 0.7rem; }
+  .btn-skip:hover { color: var(--text); border-color: var(--text-dim); }
+  .action-row { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
+  .hint-cost { font-size: 0.7rem; color: var(--text-dim); }
+  .hint-cost span { color: var(--red); }
+  .feedback {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-style: italic;
+    display: none;
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .feedback.wrong { display: block; background: rgba(255,77,109,0.1); border-left: 2px solid var(--red); color: var(--red); }
+  .feedback.correct { display: block; background: rgba(200,241,53,0.08); border-left: 2px solid var(--accent); color: var(--accent); }
+  .overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(10,10,15,0.92);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .overlay.show { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3rem;
+    max-width: 460px;
+    width: 90%;
+    text-align: center;
+    position: relative;
+    animation: popIn 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .modal::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  @keyframes popIn { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+  .modal-emoji { font-size: 3.5rem; margin-bottom: 1rem; }
+  .modal-title { font-family: 'Syne', sans-serif; font-size: 1.8rem; font-weight: 800; margin-bottom: 0.5rem; }
+  .modal-country { color: var(--accent); font-size: 1.1rem; margin-bottom: 1rem; }
+  .modal-points { font-family: 'Syne', sans-serif; font-size: 2.5rem; font-weight: 800; color: var(--gold); margin-bottom: 0.5rem; }
+  .modal-sub { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 2rem; }
+  .btn-next { background: var(--accent); color: #0a0a0f; padding: 0.9rem 2.5rem; font-size: 0.85rem; }
+  .btn-next:hover { background: #d9ff40; }
+  .progress-wrap { height: 3px; background: var(--border); border-radius: 2px; margin-bottom: 1.5rem; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 2px; transition: width 0.5s ease; }
+  .attempts-row { display: flex; gap: 0.4rem; margin-bottom: 1.5rem; }
+  .attempt-dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--muted); background: transparent; transition: background 0.2s; }
+  .attempt-dot.used { background: var(--red); border-color: var(--red); }
+  .total-wrap { text-align: center; padding: 1.5rem 0; border-top: 1px solid var(--border); margin-top: 2rem; }
+  .total-label { font-size: 0.65rem; letter-spacing: 3px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; }
+  .total-score { font-family: 'Syne', sans-serif; font-size: 3rem; font-weight: 800; color: var(--gold); }
+  .autocomplete-list {
+    position: absolute; z-index: 10;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: none;
+    width: 100%; left: 0; top: 100%;
+    max-height: 160px; overflow-y: auto;
+    border-radius: 0 0 4px 4px;
+    display: none;
+  }
+  .autocomplete-list.show { display: block; }
+  .autocomplete-item { padding: 0.6rem 1rem; font-size: 0.85rem; cursor: pointer; transition: background 0.1s; }
+  .autocomplete-item:hover, .autocomplete-item.active { background: rgba(200,241,53,0.1); color: var(--accent); }
+  .input-wrap { position: relative; flex: 1; }
+  .session-note { font-size: 0.6rem; color: var(--text-dim); letter-spacing: 1px; text-align: center; margin-top: 0.75rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">GEO<span>MIND</span></div>
+  <div class="score-bar">
+    <div class="score-item">
+      <div class="score-label">Round</div>
+      <div class="score-value" id="roundNum">1/10</div>
+    </div>
+    <div class="score-item">
+      <div class="score-label">Score</div>
+      <div class="score-value gold" id="totalScore">0</div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="game-card">
+    <div class="round-tag" id="roundTag">ROUND 01 · IDENTIFY THE COUNTRY</div>
+    <div class="progress-wrap"><div class="progress-fill" id="progressFill" style="width:10%"></div></div>
+
+    <div class="clues-header">
+      <div class="clues-title">Clues Revealed</div>
+      <div class="points-badge">Max this round: <span id="maxPoints">1000</span> pts</div>
+    </div>
+
+    <ul class="clue-list" id="clueList"></ul>
+    <div class="clue-locked" id="lockedClue">🔒 Next clue costs <span id="nextDeduction" style="color:var(--red)">−150</span> pts · click "Reveal Hint"</div>
+
+    <div class="attempts-row" id="attemptsRow"></div>
+
+    <div class="input-row">
+      <div class="input-wrap">
+        <input class="guess-input" type="text" id="guessInput" placeholder="Type a country name…" autocomplete="off">
+        <div class="autocomplete-list" id="autocompleteList"></div>
+      </div>
+      <button class="btn btn-guess" onclick="submitGuess()">Guess</button>
+    </div>
+
+    <div class="action-row">
+      <div class="hint-cost">Reveal hint costs <span id="hintCost">150</span> pts</div>
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn btn-skip" onclick="skipRound()">Skip →</button>
+        <button class="btn btn-hint" id="hintBtn" onclick="revealHint()">Reveal Hint</button>
+      </div>
+    </div>
+
+    <div class="feedback" id="feedback"></div>
+    <div class="session-note" id="sessionNote"></div>
+  </div>
+</main>
+
+<!-- Round result modal -->
+<div class="overlay" id="resultOverlay">
+  <div class="modal">
+    <div class="modal-emoji" id="resultEmoji">🌍</div>
+    <div class="modal-title" id="resultTitle">Correct!</div>
+    <div class="modal-country" id="resultCountry"></div>
+    <div class="modal-points" id="resultPoints">+800</div>
+    <div class="modal-sub" id="resultSub"></div>
+    <button class="btn btn-guess btn-next" onclick="nextRound()">Next Country →</button>
+  </div>
+</div>
+
+<!-- Game over modal -->
+<div class="overlay" id="gameOverOverlay">
+  <div class="modal">
+    <div class="modal-emoji">🏆</div>
+    <div class="modal-title" style="color:var(--gold)">Game Over</div>
+    <div class="modal-sub" style="margin-bottom:0.5rem">You've completed all 10 rounds</div>
+    <div class="total-wrap">
+      <div class="total-label">Final Score</div>
+      <div class="total-score" id="finalScore">0</div>
+    </div>
+    <div class="modal-sub" id="finalRank" style="font-size:0.9rem;color:var(--accent2);margin-top:0.5rem;margin-bottom:1.5rem"></div>
+    <button class="btn btn-guess btn-next" onclick="restartGame()">Play Again</button>
+  </div>
+</div>
+
+<script>
+// ─── ALL COUNTRIES for autocomplete ──────────────────────────────────────────
+const ALL_COUNTRIES = [
+  "Afghanistan","Albania","Algeria","Andorra","Angola","Argentina","Armenia","Australia","Austria","Azerbaijan",
+  "Bahamas","Bahrain","Bangladesh","Barbados","Belarus","Belgium","Belize","Benin","Bhutan","Bolivia",
+  "Bosnia and Herzegovina","Botswana","Brazil","Brunei","Bulgaria","Burkina Faso","Burundi","Cambodia","Cameroon","Canada",
+  "Cape Verde","Central African Republic","Chad","Chile","China","Colombia","Comoros","Congo","Costa Rica","Croatia",
+  "Cuba","Cyprus","Czech Republic","Denmark","Djibouti","Dominican Republic","Ecuador","Egypt","El Salvador","Estonia",
+  "Ethiopia","Fiji","Finland","France","Gabon","Gambia","Georgia","Germany","Ghana","Greece",
+  "Guatemala","Guinea","Guyana","Haiti","Honduras","Hungary","Iceland","India","Indonesia","Iran",
+  "Iraq","Ireland","Israel","Italy","Jamaica","Japan","Jordan","Kazakhstan","Kenya","Kuwait",
+  "Kyrgyzstan","Laos","Latvia","Lebanon","Lesotho","Liberia","Libya","Lithuania","Luxembourg","Madagascar",
+  "Malawi","Malaysia","Maldives","Mali","Malta","Mauritania","Mauritius","Mexico","Moldova","Mongolia",
+  "Montenegro","Morocco","Mozambique","Myanmar","Namibia","Nepal","Netherlands","New Zealand","Nicaragua","Niger",
+  "Nigeria","North Korea","North Macedonia","Norway","Oman","Pakistan","Panama","Papua New Guinea","Paraguay","Peru",
+  "Philippines","Poland","Portugal","Qatar","Romania","Russia","Rwanda","Saudi Arabia","Senegal","Serbia",
+  "Sierra Leone","Singapore","Slovakia","Slovenia","Somalia","South Africa","South Korea","South Sudan","Spain","Sri Lanka",
+  "Sudan","Suriname","Sweden","Switzerland","Syria","Taiwan","Tajikistan","Tanzania","Thailand","Togo",
+  "Trinidad and Tobago","Tunisia","Turkey","Turkmenistan","Uganda","Ukraine","United Arab Emirates","United Kingdom","United States","Uruguay",
+  "Uzbekistan","Venezuela","Vietnam","Yemen","Zambia","Zimbabwe"
+];
+
+// ─── CLUE DATABASE ────────────────────────────────────────────────────────────
+// Each country has an array of individual clues (objects with text + pts).
+// pts = 0 for the free first clue; 100-200 for subsequent ones.
+// A "question" = one country + 5 clues selected from its pool.
+// The engine picks 5 random clues from the pool each game, so the same country
+// can appear in consecutive games with entirely different clue sets.
+
+const CLUE_DB = {
+
+  "Japan": [
+    { text: "This country has a conviction rate above 99% in criminal trials, yet its crime rate is among the lowest in the developed world.", pts: 0 },
+    { text: "It is home to a practice called 'karoshi' — death from overwork — which is officially recognised as a cause of death and has its own government task force.", pts: 150 },
+    { text: "The country has vending machines that outnumber one per 23 people, selling everything from hot food to umbrellas and even insurance.", pts: 150 },
+    { text: "A form of therapeutic 'forest bathing' originated here and is officially prescribed by physicians as a medical intervention.", pts: 150 },
+    { text: "This country experiences roughly 1,500 earthquakes per year, most imperceptible, but its building codes account for every tremor.", pts: 150 },
+    { text: "It is the world's largest importer of fish despite being an island nation surrounded by some of the world's most productive fishing grounds.", pts: 150 },
+    { text: "A strict etiquette around gift-giving exists here: gifts are never opened in front of the giver, and the wrapping is considered as important as the gift itself.", pts: 200 },
+    { text: "This nation has a holiday called 'Respect for the Aged Day' and has more people over 100 years old per capita than almost any other country.", pts: 200 },
+    { text: "The same company has been operating continuously as a business here since 578 AD — the world's oldest surviving company, a construction firm.", pts: 200 },
+    { text: "Its capital city's subway system is so punctual that the average delay across all lines is measured in seconds, not minutes.", pts: 200 },
+    { text: "The country manufactures more adult diapers than baby diapers, reflecting a demographic shift with no parallel in modern history.", pts: 200 },
+    { text: "A tradition of repairing broken pottery with gold lacquer exists here, treating damage as part of an object's history rather than something to hide.", pts: 150 },
+  ],
+
+  "Iceland": [
+    { text: "This country's phone books list residents by first name rather than surname, because family names change every generation by patronymic rule.", pts: 0 },
+    { text: "It has no mosquitoes — scientists have studied the climate extensively and still cannot fully explain their complete absence.", pts: 150 },
+    { text: "The country publishes more books per capita than any other nation on Earth, and nearly every citizen reads at least one book a year.", pts: 150 },
+    { text: "Despite its name suggesting permanent ice, large parts of the island are green and temperate, while its neighbour with 'green' in the name is mostly covered in ice.", pts: 150 },
+    { text: "Over 85% of its energy comes from geothermal and hydropower, and it has no standing army — one of the few countries in the world without one.", pts: 150 },
+    { text: "The country has a tradition called 'Jólabókaflóð' — the Christmas Book Flood — where people exchange books on Christmas Eve and spend the night reading.", pts: 150 },
+    { text: "Its parliament, the Althing, was established in 930 AD, making it one of the world's oldest functioning legislative assemblies.", pts: 200 },
+    { text: "This nation crowdsourced its new constitution after its financial collapse — citizens contributed clauses through social media in a global first.", pts: 200 },
+    { text: "The entire population of this country is so small that a genealogy app exists to prevent people from accidentally dating a cousin.", pts: 200 },
+    { text: "It sits directly on the Mid-Atlantic Ridge, meaning the country is literally being split apart — the two tectonic plates beneath it diverge by about 2.5 cm per year.", pts: 200 },
+    { text: "Beer was banned here until 1989, even though wine and spirits had been legal for decades prior.", pts: 150 },
+  ],
+
+  "Brazil": [
+    { text: "This country's largest city hosts the world's biggest annual street festival, attended by over 2 million people per day for nearly a week.", pts: 0 },
+    { text: "It is the only nation in the Americas where the official language is not English, Spanish, or French, but Portuguese.", pts: 150 },
+    { text: "The country contains the world's largest river by volume — it carries more freshwater than the next seven largest rivers combined.", pts: 150 },
+    { text: "It has more species of primates than any other country, and more species of freshwater fish than the entire Atlantic Ocean.", pts: 150 },
+    { text: "The country's capital city was purpose-built from scratch in the interior — designed by a single architect and inaugurated in 1960.", pts: 150 },
+    { text: "A Portuguese king fled a Napoleonic invasion and moved the entire royal court here in 1808, making it the only colony in history to serve as the seat of a European empire.", pts: 200 },
+    { text: "The country processes most of the world's orange juice and is the world's largest producer of sugar cane, yet has significant food insecurity in its northeast.", pts: 200 },
+    { text: "An annual festival here involves participants being buried up to their necks in sand and having crabs placed on them — a traditional folk cure for certain ailments.", pts: 200 },
+    { text: "Its constitution is one of the longest in the world and explicitly includes the right to leisure, the right to beauty, and protection of cultural heritage.", pts: 200 },
+    { text: "The country shares a border with every South American nation except two.", pts: 150 },
+    { text: "It introduced the world's first city-wide bus rapid transit system, pioneered in one of its southern cities, now replicated globally.", pts: 150 },
+  ],
+
+  "Mongolia": [
+    { text: "At its historical peak, the empire originating from this land was the largest contiguous land empire in human history, spanning 24 million square kilometres.", pts: 0 },
+    { text: "This country has the lowest population density of any sovereign nation, with more horses than cars and more goats than people.", pts: 150 },
+    { text: "Around 30% of its population remains nomadic or semi-nomadic, migrating with their herds across vast steppe seasons.", pts: 150 },
+    { text: "Its traditional sport of horse racing uses child jockeys as young as five years old, a practice dating back centuries with no minimum age reform.", pts: 150 },
+    { text: "The country's traditional dwelling can be erected and dismantled by a family in under an hour — a circular felt structure designed for a nomadic life.", pts: 150 },
+    { text: "This nation contains the Gobi Desert, one of Earth's fastest-expanding deserts, which grows by thousands of square kilometres annually due to overgrazing and climate change.", pts: 200 },
+    { text: "The country was a Soviet satellite state until 1990 and had its traditional script banned, replaced with Cyrillic — which it is now officially reverting from.", pts: 200 },
+    { text: "A man who conquered most of the known world is buried here in a location so secret that the burial party reportedly killed all witnesses, and the tomb has never been found.", pts: 200 },
+    { text: "Its national sport, 'naadam', consists of three competitions: wrestling, horse racing, and archery — all conducted in traditional dress.", pts: 150 },
+    { text: "The country has more UNESCO-protected land per capita than almost anywhere else, yet suffers from severe urban air pollution in its capital during winter.", pts: 200 },
+  ],
+
+  "Norway": [
+    { text: "This country has the world's largest sovereign wealth fund, worth over a trillion dollars, accumulated by investing oil revenues for future generations.", pts: 0 },
+    { text: "It has one of the highest rates of electric vehicle ownership globally, with EVs comprising the majority of new car sales for several consecutive years.", pts: 150 },
+    { text: "One of its island prisons is regularly cited as the world's most humane detention facility — it resembles a village more than a jail.", pts: 150 },
+    { text: "Salmon farming here produces more farmed Atlantic salmon than any other nation, yet wild salmon populations in its own rivers have dramatically declined.", pts: 150 },
+    { text: "The country invented the concept of 'friluftsliv' — outdoor life as a philosophy — where spending time in nature is a civic, almost spiritual, obligation.", pts: 150 },
+    { text: "It introduced the world's first legally protected wilderness area, established in 1864, predating America's national parks by nearly a decade.", pts: 200 },
+    { text: "The country's public broadcaster once aired 12 hours of uninterrupted footage of a burning fireplace, which became the most-watched programme of the year.", pts: 200 },
+    { text: "It has funded and stores the world's largest seed vault — buried deep in Arctic permafrost to safeguard crop diversity against global catastrophe.", pts: 150 },
+    { text: "A constitutional amendment here gives every citizen the right to roam freely on any uncultivated land, public or private.", pts: 150 },
+    { text: "This country was the first to ban deforestation within its own borders, while simultaneously being one of the world's largest oil exporters.", pts: 200 },
+    { text: "Its explorer was the first to reach the South Pole, arriving 34 days ahead of the British expedition that famously perished on the return journey.", pts: 200 },
+  ],
+
+  "Ethiopia": [
+    { text: "This country follows a calendar approximately 7–8 years behind the Gregorian calendar and has 13 months — the 13th being only 5 or 6 days long.", pts: 0 },
+    { text: "The world's oldest known fossil of an upright-walking human ancestor — over 3 million years old — was found here.", pts: 150 },
+    { text: "It is the only African country never colonised by a European power, having decisively defeated an Italian invasion in 1896.", pts: 150 },
+    { text: "Coffee is believed to have originated here — the word 'coffee' itself likely derives from a region within this country.", pts: 150 },
+    { text: "The country has its own ancient alphabet, Ge'ez, which is one of the world's oldest continuously used writing systems.", pts: 150 },
+    { text: "It hosts the source of the Blue Nile, which contributes around 80% of the Nile's total water volume, making it a geopolitical flashpoint with downstream nations.", pts: 200 },
+    { text: "This nation is home to the largest population of any landlocked country in the world and one of the youngest populations by median age.", pts: 200 },
+    { text: "A monolithic stone church was carved entirely out of solid rock here in the 12th century — from the top down — by workers who reportedly laboured for 24 years.", pts: 200 },
+    { text: "The country's cuisine is traditionally served on a spongy sourdough flatbread used as both plate and utensil — no cutlery is involved.", pts: 150 },
+    { text: "It fought a war with a neighbouring country over a border dispute, and the two nations' leaders won the Nobel Peace Prize for resolving it — only for tensions to reignite months later.", pts: 200 },
+  ],
+
+  "Switzerland": [
+    { text: "Every citizen of this country is legally required to have access to a nuclear fallout shelter — it has more bunker spaces than its total population.", pts: 0 },
+    { text: "Women could not vote in national elections here until 1971, and in one canton, the right was only granted by court order in 1990.", pts: 150 },
+    { text: "The country has been officially neutral in armed conflicts since 1815 and hosts the headquarters of the International Red Cross.", pts: 150 },
+    { text: "It contains the world's longest railway tunnel, completed in 2016, running 57 kilometres beneath a major mountain range.", pts: 150 },
+    { text: "Despite global fame for its cheese and chocolate, neither product was invented here — both were imported traditions refined over centuries.", pts: 150 },
+    { text: "This nation has four official languages — German, French, Italian, and Romansh — with different regions using entirely different languages in daily life.", pts: 150 },
+    { text: "The country allows its citizens to directly challenge any law passed by parliament through a referendum, requiring only 50,000 signatures to trigger a public vote.", pts: 200 },
+    { text: "It is home to the world's largest physics laboratory, which sits in a tunnel that straddles two countries and stretches 27 kilometres in circumference.", pts: 200 },
+    { text: "Banks here held dormant accounts belonging to Holocaust victims for decades, only releasing unclaimed funds after international pressure in the 1990s.", pts: 200 },
+    { text: "The country regularly has among the highest density of millionaires per capita in the world, yet its citizens consistently vote against tax cuts for the wealthy.", pts: 200 },
+  ],
+
+  "Peru": [
+    { text: "This country's ancient civilization built an entire city at 2,430 metres above sea level using only stone tools — the blocks fit so precisely a knife cannot pass between them.", pts: 0 },
+    { text: "The potato originated here, with over 3,000 varieties still cultivated in its highland regions — more potato diversity than anywhere else on Earth.", pts: 150 },
+    { text: "The country shares a massive high-altitude lake with a neighbour — the world's highest navigable lake — which sits at 3,800 metres above sea level.", pts: 150 },
+    { text: "Its ancient road network was longer than the Roman Empire's road system, built entirely without the wheel — designed for foot travel and llamas.", pts: 150 },
+    { text: "The country contains three distinct climate zones within its borders: Pacific coastal desert, Andean highlands, and Amazon rainforest.", pts: 150 },
+    { text: "Giant geoglyphs etched into its coastal desert plateau are so large they can only be fully appreciated from the air — their purpose remains debated by archaeologists.", pts: 150 },
+    { text: "Spanish conquest of this land was achieved by fewer than 200 soldiers who captured and ransomed the emperor for a room full of gold and silver — then killed him anyway.", pts: 200 },
+    { text: "The country has the world's largest flying bird by wingspan still in existence — the Andean condor — which is also its national symbol.", pts: 150 },
+    { text: "Its government has spent decades excavating an ancient site that may contain dozens of undiscovered tombs — archaeologists estimate less than 30% has been excavated.", pts: 200 },
+    { text: "The country's cuisine is considered one of the most biodiverse in the world, using ingredients grown at sea level and at 4,000 metres elevation within the same national kitchen.", pts: 200 },
+  ],
+
+  "Finland": [
+    { text: "This country has more saunas than cars — approximately 3 million saunas for a population of 5.5 million, with sauna culture holding near-sacred cultural status.", pts: 0 },
+    { text: "It consistently ranks first in global education assessments, yet teachers here work fewer hours than OECD averages and homework is minimal.", pts: 150 },
+    { text: "The country has roughly 188,000 lakes — giving it one of the highest lake-to-land ratios of any nation on Earth.", pts: 150 },
+    { text: "It hosts the annual Wife Carrying World Championship, a sport with precise technical rules governing legal carry positions and time penalties.", pts: 150 },
+    { text: "This country gave the world's fictional Santa Claus an official home — there is a designated Santa's village at the Arctic Circle with its own post office.", pts: 150 },
+    { text: "Mobile phones were invented in a neighbouring country, but this country's company dominated global mobile phone manufacturing for over a decade before losing it all.", pts: 200 },
+    { text: "The country fought a war with the Soviet Union in which it was vastly outnumbered, yet inflicted casualties at a ratio of nearly 5:1 before ultimately ceding territory.", pts: 200 },
+    { text: "A concept called 'sisu' — a form of extreme resilience, stoic determination, and grit — has no direct English translation and is considered a national character trait.", pts: 150 },
+    { text: "This nation has the highest per-capita heavy metal bands of any country in the world, despite its small population.", pts: 200 },
+    { text: "Its capital hosts the world's only permanent statue of an athlete who was stripped of an Olympic gold medal — a deliberate national statement about the injustice of that disqualification.", pts: 200 },
+  ],
+
+  "New Zealand": [
+    { text: "This country was one of the last major landmasses on Earth settled by humans — Polynesian navigators arrived only around 700 years ago.", pts: 0 },
+    { text: "It was the first country in the world to grant women the right to vote in national elections, in 1893.", pts: 150 },
+    { text: "The country has no native land mammals except two species of bat — its entire land fauna evolved without mammals for 80 million years.", pts: 150 },
+    { text: "More sheep live here than people — roughly 5 sheep per person — and wool was historically its primary export.", pts: 150 },
+    { text: "The country has a 'nuclear-free zone' status written into law, and it banned nuclear-powered vessels from its waters — causing a temporary diplomatic rift with a major ally.", pts: 200 },
+    { text: "Its indigenous people navigated the Pacific Ocean without instruments, using star maps, wave patterns, and bird behaviour — achievements not replicated until the modern era.", pts: 150 },
+    { text: "The country has a flightless national bird that is nocturnal, lays the largest egg relative to body size of any bird, and is functionally blind in daylight.", pts: 150 },
+    { text: "This nation granted a river full legal personhood in 2017 — the same rights as a human being — based on indigenous belief that the river is an ancestor.", pts: 200 },
+    { text: "The country's largest city sits on a volcanic field of over 50 volcanoes, some of which erupted within the past few hundred years.", pts: 200 },
+    { text: "A government official here holds the title 'Minister for the Future' — a role created to legally represent the interests of people not yet born.", pts: 200 },
+  ],
+
+  "India": [
+    { text: "This country has the world's largest postal network, with post offices in locations accessible only by boat, camel, or on foot.", pts: 0 },
+    { text: "It produces more films annually than any other country — its film industry releases over 1,500 films per year across dozens of regional languages.", pts: 150 },
+    { text: "The game of chess originated here, as did the concept of zero — both exports that fundamentally altered the course of human civilisation.", pts: 150 },
+    { text: "This country has more vegetarians as a percentage of population than any other large nation, with over 30% of its citizens eating no meat.", pts: 150 },
+    { text: "A festival here involves the world's largest human gathering — a religious pilgrimage that can attract over 40 million people to a single location in a single day.", pts: 150 },
+    { text: "The country's constitution is the world's longest written national constitution, containing 448 articles across 22 parts and 12 schedules.", pts: 200 },
+    { text: "It was the first country to formally recognise that a third gender exists in law — a recognition that predates most Western legal frameworks by decades.", pts: 200 },
+    { text: "A city here receives so much rain during monsoon season that it once recorded 94 centimetres of rainfall in a single 24-hour period.", pts: 200 },
+    { text: "The decimal number system used universally in modern mathematics was developed here and carried to the rest of the world via Arabic scholars.", pts: 150 },
+    { text: "A monument here — widely considered one of the world's great love stories in stone — took 22 years and 20,000 workers to construct, yet its architect was later imprisoned by the man who commissioned it.", pts: 200 },
+  ],
+
+  "China": [
+    { text: "This country invented paper, printing, gunpowder, and the compass — four technologies that historians argue fundamentally changed the trajectory of human civilisation.", pts: 0 },
+    { text: "It has more speakers of a tonal language as a first language than any other on Earth, with multiple mutually unintelligible dialects unified by a common writing system.", pts: 150 },
+    { text: "The country built a wall so long it stretches roughly the distance from New York to Los Angeles — though the claim it's visible from space is a myth.", pts: 150 },
+    { text: "It produces and consumes more pork than any other country — roughly half of the world's pigs live within its borders.", pts: 150 },
+    { text: "A single river here — the Yangtze — drains an area larger than Western Europe and hosts the world's largest hydroelectric dam, which has subtly shifted Earth's rotation.", pts: 150 },
+    { text: "The country once had a policy limiting most families to one child for over three decades — one of the most consequential demographic experiments in history.", pts: 200 },
+    { text: "It is the world's largest producer of steel — producing more than all other countries combined — used primarily to build infrastructure at an unprecedented pace.", pts: 150 },
+    { text: "The country has the world's longest high-speed rail network, spanning distances comparable to circumnavigating the globe.", pts: 150 },
+    { text: "A terra-cotta army of thousands of life-size soldiers was buried here with an emperor over 2,200 years ago — and archaeologists believe the main tomb has still never been opened.", pts: 200 },
+    { text: "The country's ancient examination system, which allowed commoners to join the government by passing tests, was the world's first meritocratic civil service — adopted later by British India and Europe.", pts: 200 },
+  ],
+
+  "Australia": [
+    { text: "This country's most famous structure was designed by a foreign architect who was later excluded from the project, left before it was finished, and never returned.", pts: 0 },
+    { text: "It has more venomous species of snakes than any other country, yet fewer snake-bite deaths annually than many far smaller nations.", pts: 150 },
+    { text: "The country fought an unofficial 'war' against emus in 1932 — deploying soldiers and machine guns against a flock of birds — and lost.", pts: 150 },
+    { text: "A large portion of its land is classified as desert, yet it is the world's largest exporter of coal and beef simultaneously.", pts: 150 },
+    { text: "This country's indigenous people are the longest continuous civilisation in human history, with cultural and spiritual connections to the land stretching back at least 65,000 years.", pts: 200 },
+    { text: "The country has a practice of compulsory voting — citizens can be fined for not turning up to an election, resulting in turnout rates consistently above 90%.", pts: 150 },
+    { text: "One of its cities has the world's largest tram network, while another contains more coffee shops per capita than almost any city outside Italy.", pts: 200 },
+    { text: "The country is home to the longest fence in the world — a 5,600 km 'dingo fence' built to protect livestock from wild dogs.", pts: 150 },
+    { text: "Its national government once implemented a deliberate policy of removing indigenous children from their families and placing them with white families — a period now officially known as the 'Stolen Generations'.", pts: 200 },
+    { text: "Sheep outnumber people by a ratio of about 3.5 to 1 here, and the country produces roughly 90% of the world's merino wool.", pts: 150 },
+  ],
+
+  "Germany": [
+    { text: "This country's beer purity law — mandating only water, barley, and hops could be used in brewing — was enacted in 1516 and is one of the world's oldest food regulations still referenced today.", pts: 0 },
+    { text: "It has the world's largest Christmas market tradition, with over 3,000 markets held annually, a practice dating back to the 14th century.", pts: 150 },
+    { text: "The country produces and exports more cars per capita than any other major economy, with automotive engineering deeply embedded in its national identity.", pts: 150 },
+    { text: "A wall once divided its largest city in two for 28 years — families were separated, and over 140 people died attempting to cross it.", pts: 150 },
+    { text: "This nation's constitution, written after total defeat in war, explicitly states that human dignity is inviolable — and that any government violating it may be resisted.", pts: 200 },
+    { text: "It invented the kindergarten — the word itself is this country's language — as well as the modern research university, the PhD, and the printing press.", pts: 150 },
+    { text: "The country is the world's second largest book fair host, and Frankfurt's annual book fair has operated continuously since 1454.", pts: 200 },
+    { text: "Its government mandates that companies over a certain size must include workers' representatives on the board of directors — a system called co-determination.", pts: 200 },
+    { text: "The autobahn here has sections with no speed limit — yet its road fatality rate is lower than countries with strict national limits.", pts: 150 },
+    { text: "This country's language has a unique ability to create compound words — the longest legally used word contains 63 letters and refers to a specific regulation about beef labelling.", pts: 200 },
+  ],
+
+  "France": [
+    { text: "This country is the world's most visited nation by international tourists — more people visit it annually than live there.", pts: 0 },
+    { text: "It has more cheeses than there are days in a year — de Gaulle famously asked how one could govern a nation with over 246 varieties.", pts: 150 },
+    { text: "The country's legal system has a provision allowing a living person to marry a dead one — a 'posthumous marriage' requires presidential approval.", pts: 150 },
+    { text: "It invented the metric system during its revolution, standardising measurement globally — though it retained its own regional wine measurements simultaneously.", pts: 150 },
+    { text: "The country's Foreign Legion — an army unit open to foreigners seeking a new identity — can grant citizenship to any soldier wounded in battle on its behalf.", pts: 200 },
+    { text: "A road race originating here in 1903 became the world's most prestigious cycling event, yet for many years it was boycotted by its own country's top riders.", pts: 150 },
+    { text: "The country has the highest number of nuclear reactors per capita of any major nation, generating around 70% of its electricity from atomic power.", pts: 200 },
+    { text: "Its language academy — established in 1635 — is tasked with protecting the purity of the language from foreign words, officially ruling against 'le weekend' and 'le selfie'.", pts: 200 },
+    { text: "This country's revolution gave the world a political vocabulary — 'left' and 'right' as political positions originate from where factions sat in its revolutionary assembly.", pts: 200 },
+    { text: "The country holds a village called 'Pussy,' a town called 'Condom,' and a commune officially named 'Fucking' lies just across a neighbouring border it once controlled.", pts: 150 },
+  ],
+
+  "Russia": [
+    { text: "This country spans 11 time zones — if it were a continent, it would be the largest on Earth, covering more land than Pluto's surface area.", pts: 0 },
+    { text: "It contains Lake Baikal, which holds approximately 20% of the world's unfrozen surface freshwater — more than all of North America's Great Lakes combined.", pts: 150 },
+    { text: "This country sent the first human being into space, the first woman, the first spacewalk, and the first space station — all before any other nation.", pts: 150 },
+    { text: "The Trans-Siberian Railway, crossing this country from west to east, is the world's longest railway line — a single trip takes about 7 days without stopping.", pts: 150 },
+    { text: "During its most extreme historical period, a government here deliberately engineered a famine that killed millions of people by exporting grain while its own citizens starved.", pts: 200 },
+    { text: "The country has a tradition of literary giants so revered that authors here have historically wielded more public influence than politicians.", pts: 150 },
+    { text: "It has the world's largest proven natural gas reserves and uses this resource as both economic leverage and diplomatic tool with neighbouring countries.", pts: 200 },
+    { text: "The country's vodka consumption is so embedded culturally that a 1980s government campaign to limit it was credited with accelerating the nation's financial collapse.", pts: 200 },
+    { text: "A chess match here in 1972 — between a local champion and an American — was called 'the match of the century' and was treated as a Cold War proxy battle.", pts: 200 },
+    { text: "The country had a tsar, then a brief democracy of months, then communism for 74 years, then returned to a form of presidential rule — all within living memory of people born in its final Soviet years.", pts: 200 },
+  ],
+
+  "Mexico": [
+    { text: "This country's ancient civilisation built a pyramid that, by volume, is larger than the Great Pyramid of Giza — the largest pyramid on Earth by volume.", pts: 0 },
+    { text: "It is the birthplace of chocolate, with cacao cultivated here for at least 3,500 years before being exported to Europe — where it was heavily sweetened.", pts: 150 },
+    { text: "The country has one of the world's largest megacities, which was built on a lake — its ancient predecessor city was literally constructed on islands connected by causeways.", pts: 150 },
+    { text: "It is a megadiverse country — home to around 10% of all species on Earth within its borders, despite covering only 1.5% of global land area.", pts: 150 },
+    { text: "A holiday celebrated here in late October has been adopted globally — it honours the dead with offerings, marigolds, and skull imagery, and predates Christian influence.", pts: 150 },
+    { text: "The country's cuisine is one of only two national cuisines listed as UNESCO Intangible Cultural Heritage, recognised for its complexity and biological diversity of ingredients.", pts: 200 },
+    { text: "This nation was the source of one of history's greatest epidemics — smallpox brought by Spanish conquistadors killed an estimated 90% of the indigenous population within decades.", pts: 200 },
+    { text: "The country is the world's largest producer of avocados and tequila — two exports that have generated international cartel violence over their supply chains.", pts: 200 },
+    { text: "An artist from here is one of the world's most recognised painters — famous for self-portraits, surrealism, and a turbulent marriage — whose work now sells for record prices.", pts: 150 },
+    { text: "The country's border with its northern neighbour is the most crossed international border in the world, with over 350 million legal crossings annually.", pts: 150 },
+  ],
+
+  "Turkey": [
+    { text: "This country contains two continents within its borders — a small northwest portion is geographically European, while the vast majority is in Asia.", pts: 0 },
+    { text: "It is home to the world's oldest known temple complex, dating back over 11,000 years — predating Stonehenge by 6,000 years and pottery by 1,000 years.", pts: 150 },
+    { text: "The country is the world's largest producer of hazelnuts, supplying roughly 75% of global demand — meaning most of the world's chocolate-hazelnut spreads rely on it.", pts: 150 },
+    { text: "Its largest city was once simultaneously the capital of three empires across different historical periods — Roman, Byzantine, and Ottoman.", pts: 150 },
+    { text: "The country is the world's largest recipient of refugees, hosting more displaced people than any other nation.", pts: 200 },
+    { text: "It invented the whirling dervish as a form of Sufi meditation — a practice where spinning continuously for extended periods is considered a path to divine union.", pts: 150 },
+    { text: "Tulips — often associated with the Netherlands — were actually cultivated and exported from this country to Europe in the 16th century, triggering one of history's first economic bubbles.", pts: 200 },
+    { text: "The country technically controls the only legal waterway connecting the Black Sea to the Mediterranean, giving it enormous geopolitical leverage over naval movements.", pts: 200 },
+    { text: "Its founder abolished the caliphate, banned religious dress in government spaces, switched from Arabic to Latin script, and gave women the right to vote — all within a single decade.", pts: 200 },
+  ],
+
+  "Argentina": [
+    { text: "This country has defaulted on its national debt more times than any other country in modern history — at least nine times — yet remains one of South America's largest economies.", pts: 0 },
+    { text: "It is the birthplace of a dance that became one of the world's most recognisable — performed in close embrace, developed in the underclass neighbourhoods of its capital.", pts: 150 },
+    { text: "The country has more psychologists per capita than any other nation, with the capital city having the highest concentration of therapists of any city on Earth.", pts: 150 },
+    { text: "A military junta here 'disappeared' an estimated 30,000 people between 1976 and 1983 — victims were drugged and dropped into the sea from aircraft.", pts: 200 },
+    { text: "Beef consumption here is so culturally central that annual per-capita consumption has historically exceeded 50kg — one of the highest in the world.", pts: 150 },
+    { text: "The country is one of only three in the world to have produced and used ballistic missiles, and once had a nuclear weapons programme it voluntarily dismantled.", pts: 200 },
+    { text: "A war fought here in 1982 lasted only 74 days, between this country and a superpower — over a group of remote islands with fewer than 2,000 civilian inhabitants.", pts: 200 },
+    { text: "This country was the destination of choice for Nazi war criminals fleeing Europe after World War II — more war criminals resettled here than anywhere else.", pts: 200 },
+    { text: "The country is the world's largest producer of soybeans not used for direct human consumption, growing vast monocultures that have transformed its native forests.", pts: 150 },
+  ],
+
+  "South Korea": [
+    { text: "This country has the fastest average internet speeds in the world and the highest smartphone penetration rate of any nation.", pts: 0 },
+    { text: "It went from one of the world's poorest economies to one of the wealthiest in a single generation — a transformation economists call the 'Miracle on the Han River'.", pts: 150 },
+    { text: "The country's culture of competitive exam pressure has produced one of the world's most educated populations, yet also one of the highest rates of youth burnout and suicide.", pts: 200 },
+    { text: "A handful of massive family-owned conglomerates here control a disproportionate share of the entire national economy — including electronics, construction, and insurance.", pts: 150 },
+    { text: "This country's pop music and television dramas have created one of the most globally influential cultural exports of the 21st century, spreading its language worldwide.", pts: 150 },
+    { text: "It is the world's leading producer of memory semiconductors, controlling the supply of chips that power most of the world's smartphones and computers.", pts: 150 },
+    { text: "Plastic surgery rates here are among the highest per capita globally — procedures are considered routine and often gifted as graduation presents.", pts: 200 },
+    { text: "The country technically remains at war with its northern neighbour — the Korean War ended with a ceasefire, not a peace treaty, in 1953.", pts: 150 },
+    { text: "A food — fermented vegetables prepared with chilli and garlic — is so central to national identity that a government agency monitors its international representation.", pts: 150 },
+    { text: "The country's president was impeached and jailed after a scandal involving a secret confidante with no official role who had been controlling state affairs behind the scenes.", pts: 200 },
+  ],
+
+  "Canada": [
+    { text: "This country has the world's longest coastline — stretching over 202,000 kilometres, more than twice that of any other nation.", pts: 0 },
+    { text: "It produces 71% of the world's maple syrup, with the majority coming from a single province — and a strategic maple syrup reserve is maintained against shortage.", pts: 150 },
+    { text: "The country has more lakes than the rest of the world combined — an estimated 60% of all freshwater lakes on Earth lie within its borders.", pts: 150 },
+    { text: "Its largest city does not hold the title of national capital — this is one of the few countries where the capital is not the most populous city.", pts: 150 },
+    { text: "The country formally apologised to its indigenous peoples for a century-long policy of forcibly removing children from their families and placing them in residential schools.", pts: 200 },
+    { text: "A government policy of official bilingualism here requires all federal services in both English and French — yet fewer than 20% of citizens speak both fluently.", pts: 150 },
+    { text: "This country invented basketball, standard time zones, and the telephone — though the latter is disputed by a neighbouring country.", pts: 200 },
+    { text: "The country's northernmost territories experience permanent darkness for months in winter and permanent daylight for months in summer, making seasonal depression a public health concern.", pts: 150 },
+    { text: "It is home to the world's second-largest proven oil reserves — most of which are locked in tar sands that require enormous energy to extract.", pts: 200 },
+  ],
+
+  "Egypt": [
+    { text: "This country's ancient civilisation was so long-lived that Cleopatra — its last pharaoh — lived closer in time to the Moon landing than to the construction of the pyramids.", pts: 0 },
+    { text: "The country controls the world's most strategically important artificial waterway — a canal through which roughly 12% of global trade passes daily.", pts: 150 },
+    { text: "It is home to the world's oldest known peace treaty — a document signed between two empires over a border dispute, dating back 3,200 years.", pts: 150 },
+    { text: "The country's ancient writing system went undeciphered for over 1,400 years — decoded only when a multilingual stone was found by soldiers during a military campaign.", pts: 150 },
+    { text: "Its ancient monuments were aligned with astronomical precision — the sun shines directly on the face of a pharaoh's statue only on his birthday and coronation date.", pts: 200 },
+    { text: "Despite being over 90% desert, this country is the most populous nation in the Arab world and one of the most densely populated in Africa.", pts: 150 },
+    { text: "The country's bread subsidies — maintained since the 1970s — are so politically critical that any attempt to reduce them has triggered mass unrest and government collapse.", pts: 200 },
+    { text: "A disease here — schistosomiasis — was so endemic for millennia that scientists believe it may explain the ancient texts' references to unusual symptoms in pharaohs.", pts: 200 },
+  ],
+
+  "Indonesia": [
+    { text: "This country is the world's largest archipelago, consisting of over 17,000 islands, of which roughly 6,000 are inhabited.", pts: 0 },
+    { text: "It is home to the world's largest Buddhist monument — a 9th-century temple built in the shape of a mandala, abandoned for centuries and reclaimed by jungle.", pts: 150 },
+    { text: "The country is the world's largest democracy by Muslim population — more Muslims live here than in all Arab countries combined.", pts: 150 },
+    { text: "It has more active volcanoes than any other country — around 130 — and sits on the 'Ring of Fire' where four tectonic plates converge.", pts: 150 },
+    { text: "This country is one of only three places on Earth where wild orangutans can be found, yet it loses a football field of rainforest every minute to palm oil plantations.", pts: 200 },
+    { text: "A 2004 earthquake here triggered the deadliest tsunami in recorded history, killing over 230,000 people across 14 countries.", pts: 200 },
+    { text: "The country has over 700 distinct languages — it uses a common national language as a lingua franca precisely because no single regional language could be imposed without causing civil conflict.", pts: 200 },
+    { text: "The world's largest flower by weight grows here — a parasite with no leaves or stems that blooms for just a few days and smells of rotting meat to attract pollinators.", pts: 150 },
+  ],
+
+  "Iran": [
+    { text: "This country has one of the oldest continuous civilisations on Earth — its empire once stretched from Egypt to India and is considered the world's first 'superpower'.", pts: 0 },
+    { text: "It is home to one of the world's oldest monotheistic religions, which may have influenced the development of Judaism, Christianity, and Islam.", pts: 150 },
+    { text: "The country is the world's largest producer of saffron — supplying around 90% of global demand for the world's most expensive spice by weight.", pts: 150 },
+    { text: "Ancient underground aqueducts here, called 'qanats', were built thousands of years ago and still supply water to farming communities today.", pts: 150 },
+    { text: "The country's 1979 revolution was unique in that it replaced a Western-backed monarchy with a theocratic republic — a form of government with almost no historical precedent.", pts: 200 },
+    { text: "It has one of the highest rates of nose job surgeries per capita in the world — reportedly for both cosmetic and social status reasons.", pts: 150 },
+    { text: "The country sits on approximately 10% of the world's proven oil reserves and 15% of natural gas reserves, yet its citizens face fuel rationing due to sanctions.", pts: 200 },
+    { text: "Chess, backgammon, and polo all originated in or were significantly developed within the borders of this ancient civilisation before spreading to the world.", pts: 200 },
+  ],
+
+  "Greece": [
+    { text: "This country gave the world democracy, the Olympics, the alphabet used across Europe, and theatrical drama — all within a single century, around 2,500 years ago.", pts: 0 },
+    { text: "It has more archaeological sites under active management than any other country, yet lacks the budget to excavate most of them — the majority remain buried.", pts: 150 },
+    { text: "The country's debt crisis in the 2010s became the most expensive bailout in IMF history, requiring three separate rescue packages over six years.", pts: 150 },
+    { text: "This nation has the longest average working hours of any country in the European Union, yet among the lowest productivity rates.", pts: 150 },
+    { text: "The concept of the 'marathon' distance — 42.195 kilometres — originates from a legend here about a soldier who ran from a battlefield to announce victory, then died.", pts: 150 },
+    { text: "The country's tax evasion problem is so severe that a significant portion of the economy operates entirely off-the-books — some estimates suggest it exceeds 20% of GDP.", pts: 200 },
+    { text: "An ancient temple here dedicated to the goddess of wisdom was so perfectly engineered that its columns are slightly curved inward — a deliberate optical illusion to make them appear straight.", pts: 200 },
+    { text: "The country has over 6,000 islands, but fewer than 230 are inhabited — and disputes over uninhabited rocks have nearly caused armed conflict with a neighbour multiple times.", pts: 200 },
+  ],
+
+  "Nigeria": [
+    { text: "This country is the most populous in Africa, with a population growing at such a rate that it is projected to surpass the United States by 2050.", pts: 0 },
+    { text: "It has the world's largest movie industry by number of films produced annually — nicknamed 'Nollywood', it outpaces even Hollywood in volume of output.", pts: 150 },
+    { text: "The country produces roughly 90% of the world's 'agbalumo' — a fruit with no English common name — yet exports very little of it.", pts: 200 },
+    { text: "A civil war here in the late 1960s — over a breakaway eastern region — resulted in a famine that killed between one and three million people, mostly children.", pts: 200 },
+    { text: "The country is the largest oil producer in Africa, yet experiences frequent fuel shortages — its refineries are so poorly maintained that it imports most of its own petroleum.", pts: 150 },
+    { text: "Over 500 languages are spoken within its borders, with three — Hausa, Yoruba, and Igbo — serving as regional lingua francas alongside the official European language.", pts: 150 },
+    { text: "A form of organised crime originating from this country — email fraud scams — became so widespread they now bear an informal numerical name drawn from a local law code.", pts: 200 },
+    { text: "The country contains one of Africa's most biodiverse river delta systems, simultaneously one of the most oil-polluted ecosystems in the world.", pts: 200 },
+  ],
+
+  "Saudi Arabia": [
+    { text: "This country sits atop approximately 17% of the world's proven oil reserves, and its state-owned oil company is valued as the largest in the world.", pts: 0 },
+    { text: "Women here were only granted the right to drive in 2018 — activists who had campaigned for this right were arrested the same year the reform was announced.", pts: 150 },
+    { text: "The country spent decades building the world's largest desalination capacity — it produces more fresh water from seawater than any other nation.", pts: 150 },
+    { text: "It is home to the two holiest cities in Islam, visited collectively by millions of pilgrims annually — the hajj is the world's largest annual human gathering.", pts: 150 },
+    { text: "The country has no rivers — it is entirely dependent on groundwater aquifers and desalination, and those aquifers are expected to run dry within decades.", pts: 200 },
+    { text: "A kingdom here introduced a 'Vision 2030' plan to build a city of pure glass and steel in the desert, 170 km long and invisible from the outside, as a post-oil economy project.", pts: 200 },
+    { text: "The country exports massive quantities of camel milk powder and camel meat, with a domestic camel population of around 1 million — the world's largest.", pts: 200 },
+    { text: "The ruling family here has approximately 15,000 princes — descendants of a single founder through dozens of wives — creating a royal class that controls most state institutions.", pts: 200 },
+  ],
+
+  "Israel": [
+    { text: "This country has the highest number of museums per capita in the world, and more university degrees per capita than almost any other nation.", pts: 0 },
+    { text: "It invented drip irrigation technology — a system that delivers water directly to plant roots and has transformed agriculture in arid regions globally.", pts: 150 },
+    { text: "The country has compulsory military service for both men and women, with most citizens serving two to three years in their late teens.", pts: 150 },
+    { text: "Its main language was a classical, liturgical language with no native speakers for over 1,700 years — revived as a modern spoken tongue in the 20th century, uniquely in recorded history.", pts: 200 },
+    { text: "The country has more startup companies per capita than anywhere else on Earth — a density of innovation that has earned it the nickname 'the startup nation'.", pts: 150 },
+    { text: "It is the only country in the world that has successfully eradicated a desert — planting over a billion trees in the Negev over 50 years reversed desertification in significant areas.", pts: 200 },
+    { text: "The Dead Sea — partly bordered by this country — is the lowest point on Earth's surface and is shrinking by over one metre per year.", pts: 150 },
+    { text: "This country's intelligence agency is widely credited with assassinating scientists in enemy countries working on nuclear programmes, using exploding phones and magnetic car bombs.", pts: 200 },
+  ],
+
+  "Pakistan": [
+    { text: "This country is home to the world's second-highest mountain, and five of the fourteen 'eight-thousanders' — peaks above 8,000 metres — lie within its borders.", pts: 0 },
+    { text: "It has the world's largest deep-sea port by volume capacity, built as part of a major infrastructure corridor connecting it to China.", pts: 150 },
+    { text: "The country has the world's largest network of canals — a colonial-era irrigation system covering millions of hectares of otherwise arid land.", pts: 150 },
+    { text: "It became the first country with a Muslim majority to elect a female head of government — in 1988 — though she was later assassinated on her return to politics.", pts: 200 },
+    { text: "The country produced the world's youngest Nobel Peace Prize winner — a teenage girl shot by extremists for advocating girls' education who then won the prize at age 17.", pts: 150 },
+    { text: "A game invented here called 'kabaddi' — a contact sport requiring players to hold their breath — has become a professional sport across South Asia and is now an Asian Games event.", pts: 200 },
+    { text: "This country's truck art — decorating lorries with elaborate patterns, chains, and calligraphy — is considered one of the world's most complex forms of folk art.", pts: 200 },
+    { text: "It was the first Muslim-majority country to successfully test nuclear weapons, doing so in 1998 in response to a neighbouring country's tests — making it the seventh nuclear power.", pts: 200 },
+  ],
+
+  "Netherlands": [
+    { text: "This country has reclaimed roughly 17% of its total land area from the sea — entire provinces exist only because of centuries of drainage engineering.", pts: 0 },
+    { text: "It has the world's highest bicycle-to-person ratio — more bicycles than people — with dedicated cycling infrastructure that predates most countries' road systems.", pts: 150 },
+    { text: "The country once possessed one of the largest colonial empires relative to its own size — controlling spice trade routes that generated wealth comparable to modern tech monopolies.", pts: 150 },
+    { text: "It pioneered a form of decriminalised drug policy in the 1970s — technically illegal cannabis is openly sold in licensed coffee shops in what amounts to a grey legal market.", pts: 150 },
+    { text: "The country created one of history's first speculative economic bubbles — an obsession with a single flower bulb drove prices to the equivalent of a house before collapsing overnight.", pts: 200 },
+    { text: "This small nation has the world's highest per-capita consumption of liquorice — consuming several kilograms per person annually, including a heavily salted variety most foreigners find unpleasant.", pts: 200 },
+    { text: "The country's euthanasia law — one of the world's most liberal — permits assisted dying for patients experiencing 'unbearable suffering' with no recovery prospect, including some mental health cases.", pts: 200 },
+    { text: "Nearly a quarter of its land sits below sea level, meaning without constant pumping and maintenance, large portions of its territory would be reclaimed by the ocean within days.", pts: 150 },
+  ],
+
+  "Sweden": [
+    { text: "This country introduced the concept of the 'ombudsman' — an independent official empowered to receive and investigate public complaints against the government.", pts: 0 },
+    { text: "It has one of the world's most extensive welfare states, funded by some of the highest income tax rates globally — yet consistently ranks among the happiest nations.", pts: 150 },
+    { text: "The country is where dynamite was invented — by a scientist who, horrified at its military applications, used his fortune to establish the world's most prestigious prize awards.", pts: 150 },
+    { text: "IKEA furniture — designed so that most pieces have the same name type — was founded here by a man who taught himself business skills from an encyclopaedia.", pts: 150 },
+    { text: "The country has a law called 'allemansrätten' — the freedom to roam — allowing any person to walk, camp, or pick berries on any land, public or private.", pts: 150 },
+    { text: "It introduced a system of parental leave so generous that fathers are legally required to take a minimum portion — to redistribute domestic labour.", pts: 200 },
+    { text: "The country's capital is built on 14 islands, connected by 57 bridges, on a series of lakes and bays where the Baltic meets a large inland lake.", pts: 200 },
+    { text: "This nation has gone from a major military empire — at one point controlling much of northern Europe — to 200+ years of unbroken peace and neutrality.", pts: 200 },
+    { text: "The country hosts an annual festival where people gather to listen to — and celebrate — the sound of a specific bird's mating call at dawn, with thousands camping outdoors for it.", pts: 200 },
+  ],
+
+  "Thailand": [
+    { text: "This country is the only nation in Southeast Asia that was never colonised by a European power, a fact that shapes its national identity and foreign policy to this day.", pts: 0 },
+    { text: "It is the world's largest exporter of rice, and its cuisine is among the most globally replicated — with over 15,000 Thai restaurants in the United States alone.", pts: 150 },
+    { text: "The country has more Buddhist temples than schools — with over 40,000 active temples, and novice monks often receiving their early education inside monastery walls.", pts: 150 },
+    { text: "It is illegal here to step on the national currency, insult the monarchy, or leave the house without wearing underwear — all enforceable criminal offences.", pts: 150 },
+    { text: "The country has the world's highest number of plastic surgery tourists — people who travel specifically to access cheaper cosmetic procedures.", pts: 200 },
+    { text: "Muay Thai — a martial art using eight points of contact including elbows and knees — originated here and is now the world's fastest-growing combat sport.", pts: 150 },
+    { text: "The country's monarchy holds a constitutional role so politically sensitive that any criticism of the royal family can result in 3–15 years imprisonment under lèse-majesté law.", pts: 200 },
+    { text: "The world's largest gold Buddha statue sits in a small temple in its capital — the statue was accidentally discovered in the 1950s when workers cracked a layer of plaster off a 'plain' statue.", pts: 200 },
+  ],
+
+  "Kenya": [
+    { text: "This country's 'Great Rift Valley' — running through it north to south — is actively splitting the African continent in two; in millions of years, a new ocean will form here.", pts: 0 },
+    { text: "It dominates long-distance running globally — producing the majority of world record holders in marathon and half-marathon distances, primarily from a single highland tribe.", pts: 150 },
+    { text: "The country was home to the oldest known ancestor of modern humans — fossil evidence here dates the emergence of the Homo genus to approximately 3.3 million years ago.", pts: 150 },
+    { text: "A tree-planting movement started by a woman here — who later won the Nobel Peace Prize — planted over 51 million trees before her death.", pts: 150 },
+    { text: "Mobile money transfer technology was pioneered here and now allows millions of people without bank accounts to pay bills and transfer money via basic mobile phones.", pts: 200 },
+    { text: "The country hosts one of the world's greatest wildlife migrations — over 1.5 million wildebeest move annually through its plains in a cyclical pattern.", pts: 150 },
+    { text: "This nation's capital sits at 1,700 metres altitude, giving it one of the mildest year-round climates of any major African city — essentially spring weather in every month.", pts: 200 },
+    { text: "A colonial British system of 'white highlands' reserved prime agricultural land exclusively for European settlers here — a legacy that still shapes land inequality today.", pts: 200 },
+  ],
+
+  "Ukraine": [
+    { text: "This country has the largest land area of any country entirely within Europe, and its plains produce so much grain it was historically called the 'breadbasket of Europe'.", pts: 0 },
+    { text: "The world's worst nuclear power plant accident occurred here in 1986 — the surrounding area became a ghost zone, and the disaster is credited with accelerating the USSR's collapse.", pts: 150 },
+    { text: "The country's language is closely related to Russian but is a distinct language — and suppressing it was historically used as a political tool to erase national identity.", pts: 150 },
+    { text: "A medieval empire here in the 10th and 11th centuries, called the 'Kievan Rus', is the historical ancestor claimed by multiple modern Slavic nations simultaneously.", pts: 200 },
+    { text: "The country voluntarily surrendered the world's third-largest nuclear arsenal in 1994 in exchange for security guarantees — guarantees later violated by one of the guarantor nations.", pts: 200 },
+    { text: "A comedy actor and television personality became this country's president with 73% of the vote — and then led a wartime government after a full-scale invasion began.", pts: 150 },
+    { text: "The country's traditional egg-decorating art, 'pysanka', dates back at least 2,000 years — each symbol and colour combination has a coded meaning.", pts: 150 },
+    { text: "Sunflower oil, produced here in greater volumes than anywhere else, became a global commodity crisis when war disrupted its export through Black Sea ports.", pts: 200 },
+  ],
+
+  "Argentina": [
+    { text: "This country has defaulted on its national debt more times than any other in modern history — yet remains one of South America's largest economies.", pts: 0 },
+    { text: "It is the birthplace of a dance performed in close embrace, developed in the working-class neighbourhoods of its capital and now danced on every continent.", pts: 150 },
+    { text: "The country has more psychologists per capita than any other nation — its capital city has the highest concentration of therapists of any city on Earth.", pts: 150 },
+    { text: "A military junta here between 1976 and 1983 'disappeared' an estimated 30,000 people — victims were drugged and dropped alive into the ocean from aircraft.", pts: 200 },
+    { text: "Beef consumption here is so culturally central that annual per-capita meat consumption has historically been among the highest in the world.", pts: 150 },
+    { text: "A war fought here in 1982 lasted only 74 days, between this country and a nuclear power — over a remote island group inhabited by fewer than 2,000 civilians.", pts: 200 },
+    { text: "This country became the destination of choice for Nazi war criminals fleeing post-war Europe — more senior war criminals settled here than anywhere else.", pts: 200 },
+    { text: "Pope Francis, the first Latin American pope, was born and raised in this country and was Archbishop of its capital before being elected leader of the Catholic Church.", pts: 150 },
+  ],
+
+  "Poland": [
+    { text: "This country was divided between three neighbouring empires for 123 years — it disappeared from the map entirely between 1795 and 1918, yet its culture and language survived.", pts: 0 },
+    { text: "The world's deadliest single site of the Holocaust was located here — a complex that murdered an estimated 1.1 million people, the majority Jewish.", pts: 200 },
+    { text: "The country produced the scientist who proved the Earth revolves around the Sun, the chemist who discovered two elements and won two Nobel Prizes, and a pope who served for 26 years.", pts: 150 },
+    { text: "A shipyard workers' movement here in 1980 became the first legally recognised independent trade union in the Soviet bloc — the first crack in the Iron Curtain.", pts: 150 },
+    { text: "The country's constitution of 1791 was the world's first written national constitution in Europe and the second ever, predating the French constitution by several months.", pts: 200 },
+    { text: "Vodka was commercially produced here long before it became associated with Russia — and the country still disputes the spirit's true country of origin.", pts: 150 },
+    { text: "The country rebuilt its entire historic capital city from rubble after World War II using 18th-century paintings as architectural blueprints — and the reconstruction is now a UNESCO World Heritage Site.", pts: 200 },
+  ],
+
+  "Vietnam": [
+    { text: "This country defeated the world's most powerful military in the 20th century's most politically divisive war — and today is one of that same country's fastest-growing trading partners.", pts: 0 },
+    { text: "It has one of the world's largest cave systems — one cave is large enough to contain a 40-story skyscraper inside its chambers.", pts: 150 },
+    { text: "The country is the world's second-largest exporter of coffee, producing primarily a species — Robusta — with twice the caffeine content of the Arabica variety.", pts: 150 },
+    { text: "Its coastline stretches over 3,400 kilometres but its width at one point narrows to just 50 kilometres — creating one of the world's most elongated nations.", pts: 150 },
+    { text: "The country uses a writing system invented by a 17th-century Portuguese missionary to romanise its tonal language — completely replacing the Chinese-based script used for a thousand years.", pts: 200 },
+    { text: "A meal called pho — a noodle soup requiring bones simmered for up to 24 hours — is so culturally embedded that some Vietnamese people eat it for breakfast, lunch, and dinner.", pts: 150 },
+    { text: "The country fought a border war with China in 1979 — just four years after its war with the United States ended — and is currently in dispute with China over islands in the South China Sea.", pts: 200 },
+    { text: "Its current political system is technically communist, yet it operates one of Asia's most open foreign investment regimes and has a rapidly growing private sector.", pts: 200 },
+  ],
+
+  "Colombia": [
+    { text: "This country produces around 90% of the world's emeralds and is one of the world's largest producers of high-quality flowers, exporting to over 100 countries.", pts: 0 },
+    { text: "It is the only country in South America with coastlines on both the Pacific Ocean and the Caribbean Sea simultaneously.", pts: 150 },
+    { text: "The country has the greatest bird diversity of any nation on Earth — over 1,900 species have been recorded, more than in all of North America.", pts: 150 },
+    { text: "At its worst, this country had the world's highest murder rate — now significantly reduced — largely driven by a single cartel leader who appeared on Forbes' billionaire list.", pts: 200 },
+    { text: "The country produces the world's finest arabica coffee, grown at high altitude in a region with such specific climate conditions that it cannot be replicated elsewhere.", pts: 150 },
+    { text: "Its constitution, written in 1991 with civilian input, explicitly recognises the rights of nature, ethnic minorities, and declares the country a 'social state of law'.", pts: 200 },
+    { text: "A literary movement called 'magical realism' was pioneered by an author from this country — blending supernatural events with mundane reality in ways that influenced global fiction.", pts: 150 },
+    { text: "The country fought a 52-year civil war — one of the longest in the Western Hemisphere — that ended with a peace agreement in 2016, though violence continues in rural areas.", pts: 200 },
+  ],
+
+  "Portugal": [
+    { text: "This small country once controlled the largest empire by sea routes, establishing trade posts from Brazil to Japan before any other European power.", pts: 0 },
+    { text: "It invented a musical genre — 'fado' — described as melancholic longing for things lost, which UNESCO has listed as intangible cultural heritage.", pts: 150 },
+    { text: "The country has the world's longest uninterrupted border between two countries in Europe — sharing it with a single neighbour for over 800 years without territorial change.", pts: 200 },
+    { text: "It was the first country to fully decriminalise possession of all drugs in 2001 — treating addiction as a public health issue rather than a criminal one.", pts: 150 },
+    { text: "The country exports more cork than any other nation — supplying over 50% of the world's cork products from its ancient cork oak forests.", pts: 150 },
+    { text: "Its sailors mapped and named most of the world's southern ocean geography — many island groups and coastal features bear Portuguese names given during 15th and 16th century explorations.", pts: 200 },
+    { text: "The country has the world's oldest continuously operating bookshop — open since 1732 — still in the same location in its capital.", pts: 200 },
+    { text: "A 1755 earthquake here destroyed the capital and is considered the first modern disaster — triggering philosophical debates about divine providence and inspiring early urban planning.", pts: 200 },
+  ],
+
+  "Kenya": [
+    { text: "This country's 'Great Rift Valley' is actively splitting the African continent apart — a new ocean will form here in millions of years.", pts: 0 },
+    { text: "It dominates long-distance running globally — producing most world record holders in marathon distances, concentrated in one high-altitude region.", pts: 150 },
+    { text: "Mobile money transfer technology was pioneered here and has since become a model for financial inclusion in countries without banking infrastructure.", pts: 200 },
+    { text: "The country hosts the largest annual wildlife migration on Earth — over 1.5 million wildebeest moving through its plains in a cyclical pattern.", pts: 150 },
+    { text: "A Nobel Peace Prize was awarded to a woman from this country for starting a movement that planted over 51 million trees.", pts: 150 },
+    { text: "British colonisers here imposed a 'white highlands' system — reserving the best farmland exclusively for European settlers — whose consequences shape land inequality today.", pts: 200 },
+    { text: "The country's capital is located at 1,700 metres elevation, giving it a permanently mild climate with spring-like conditions throughout the year.", pts: 150 },
+    { text: "Some of the earliest evidence of human tool use — stone tools dated to 3.3 million years ago — was found within this country's borders.", pts: 200 },
+  ],
+
+  "South Africa": [
+    { text: "This country has 11 official languages — more than any other nation on Earth — a linguistic diversity recognised directly in its constitution.", pts: 0 },
+    { text: "It is the only country that has voluntarily built and then dismantled a nuclear weapons programme — it destroyed all six of its nuclear bombs in the early 1990s.", pts: 200 },
+    { text: "The country contains the world's largest uranium deposits and produces about a third of the world's platinum and palladium supply.", pts: 150 },
+    { text: "A policy of racial segregation here — enforced by law from 1948 to 1994 — was one of the most elaborate legal systems of discrimination ever devised.", pts: 150 },
+    { text: "The man who led the transition from that system spent 27 years imprisoned before becoming the country's first democratically elected president.", pts: 150 },
+    { text: "The world's first successful heart transplant was performed here in 1967 — a procedure that kept its patient alive for 18 days before he died of pneumonia.", pts: 200 },
+    { text: "The country's Cape Floral Region is one of the world's six floral kingdoms — and the smallest — yet contains more plant species per square kilometre than the Amazon rainforest.", pts: 200 },
+    { text: "Its city of Johannesburg was built almost entirely on gold — founded in 1886 after the world's largest gold deposit was discovered beneath its surface.", pts: 150 },
+  ],
+
+  "Cuba": [
+    { text: "This country has more doctors per capita than almost any other nation, and exports medical staff to over 60 countries as a major source of foreign revenue.", pts: 0 },
+    { text: "Despite a decades-long economic embargo, it achieved a literacy rate above 99%, one of the highest in the world.", pts: 150 },
+    { text: "The country is famous globally for a style of old car still in widespread daily use — 1950s American vehicles maintained for 70 years by improvised mechanical ingenuity.", pts: 150 },
+    { text: "A music style originating here — combining African rhythms with European harmony — became the basis for most Latin popular music genres of the 20th century.", pts: 150 },
+    { text: "The country was the site of the closest the world came to nuclear war — a confrontation in 1962 between two superpowers, with Soviet missiles positioned here.", pts: 200 },
+    { text: "It practises a form of organic farming by necessity — deprived of synthetic fertilisers and pesticides after its main supplier collapsed, it built the world's largest urban organic food network.", pts: 200 },
+    { text: "The country was under the control of a single leader for 47 consecutive years — the longest non-royal uninterrupted rule of any 20th/21st century nation.", pts: 150 },
+    { text: "Cigars hand-rolled here are considered the finest in the world — 'rolling a cigar' on a thigh is a local legend, though the actual method is more hygienic.", pts: 150 },
+  ],
+
+  "Denmark": [
+    { text: "This country consistently ranks first in global 'happiness indexes' — a phenomenon researchers attribute to low inequality, high trust, and modest expectations.", pts: 0 },
+    { text: "It introduced the world's first carbon tax in 1992 and has since become a global leader in wind energy — generating over 50% of its electricity from wind turbines.", pts: 150 },
+    { text: "A concept called 'hygge' — difficult to translate, roughly meaning cosy togetherness — originated here and became a global lifestyle trend in the 2010s.", pts: 150 },
+    { text: "The country technically controls Greenland — the world's largest island — which is 50 times its own size but has an autonomous government.", pts: 150 },
+    { text: "Its national fairy tale author gave the world stories of mermaids, ugly ducklings, and matchstick girls — tales that underlie most modern animated storytelling conventions.", pts: 150 },
+    { text: "The country has the world's oldest national flag still in use by an independent nation — a white cross on red, dating to the 13th century.", pts: 200 },
+    { text: "It pioneered a model of 'flexicurity' — combining highly flexible hire-and-fire labour laws with generous unemployment benefits — now studied globally as a labour policy model.", pts: 200 },
+    { text: "A cuisine movement here in the 2000s — 'New Nordic' — transformed fine dining globally, reintroducing fermented foods, foraged ingredients, and seasonal restriction as culinary philosophy.", pts: 200 },
+  ],
+
+  "Morocco": [
+    { text: "This country contains the world's largest phosphate reserve — a mineral essential for fertilisers — controlling around 70% of global reserves.", pts: 0 },
+    { text: "The world's oldest university still in continuous operation was founded here in 859 AD by a woman — a fact often overlooked in histories of higher education.", pts: 150 },
+    { text: "The country straddles two continents — its territory includes land in both Africa and, through an enclave, in Europe — making it the only country touching both.", pts: 150 },
+    { text: "The leather tanning district in its ancient medina has operated using the same methods for over a thousand years — the dye pits are still visible from surrounding rooftop terraces.", pts: 150 },
+    { text: "A spice blend called 'ras el hanout' — meaning 'head of the shop' — can contain up to 100 different ingredients, and its exact composition is a closely guarded merchant secret.", pts: 200 },
+    { text: "The country produces around 700,000 tonnes of argan oil annually — a cosmetic and culinary oil from a tree that only grows in this specific regional climate.", pts: 200 },
+    { text: "Its desert region is used as a training ground for Mars mission simulations — the terrain is considered the most Mars-like environment accessible on Earth.", pts: 200 },
+    { text: "The country's ancient walled city is a UNESCO World Heritage Site where GPS navigation fails — the alleyways are so densely interwoven that digital maps simply show blank space.", pts: 150 },
+  ],
+
+  "Singapore": [
+    { text: "This city-state has no natural fresh water sources and imports all its water from a neighbouring country — or manufactures it through a patented recycled sewage purification process.", pts: 0 },
+    { text: "It went from a third-world country to having one of the world's highest GDPs per capita in a single generation — often called the most successful economic transformation in history.", pts: 150 },
+    { text: "Chewing gum is effectively banned here — it can only be purchased with a doctor's prescription for medical purposes.", pts: 150 },
+    { text: "The country has only one official ethnicity that does not form a majority — its government enforces racial quotas in public housing to prevent ethnic enclaves from forming.", pts: 200 },
+    { text: "Despite being smaller than New York City, this country operates one of the world's busiest ports by cargo volume.", pts: 150 },
+    { text: "The world's most Michelin-starred street food stall is located here — a simple chicken rice stand awarded a star in 2016, with a regular queue of over two hours.", pts: 200 },
+    { text: "Its government designed the entire country using 'urban heat island' mitigation — every major building must incorporate greenery by law.", pts: 200 },
+    { text: "The country built an entire district — 'Gardens by the Bay' — where 18-storey artificial trees generate solar power and collect rainwater as a national statement about sustainability.", pts: 150 },
+  ],
+
+  "Venezuela": [
+    { text: "This country has the world's largest proven oil reserves — larger than Saudi Arabia — yet experienced one of the worst economic collapses in modern history.", pts: 0 },
+    { text: "The world's highest waterfall is located here — a free-falling drop of 979 metres, named after an American bush pilot who 'discovered' it in 1933 (despite indigenous peoples knowing it for millennia).", pts: 150 },
+    { text: "The country's hyperinflation reached such extremes that the government issued a 100-trillion bolivar note — and it still wasn't enough to buy a loaf of bread.", pts: 150 },
+    { text: "It has a lake where the water permanently glows at night — bioluminescent organisms in a brackish lagoon produce blue-green light when disturbed.", pts: 200 },
+    { text: "The country won more Miss Universe titles than any other nation — a remarkable concentration of wins for its population size.", pts: 150 },
+    { text: "A plateau system here — the 'tepuis' — inspired Arthur Conan Doyle's 'The Lost World'; these flat-topped mountains host species found nowhere else on Earth.", pts: 200 },
+    { text: "Over 7 million citizens have emigrated since 2015 — one of the largest displacement crises in the Western Hemisphere.", pts: 200 },
+  ],
+
+  "Cuba": [
+    { text: "This island nation has more doctors per capita than almost any other country and exports medical missions to over 60 nations.", pts: 0 },
+    { text: "The country maintained a near-universal literacy rate above 99% despite decades of economic embargo by a superpower neighbour.", pts: 150 },
+    { text: "It was the epicentre of the closest moment the world came to nuclear annihilation — a standoff in 1962 that lasted 13 days.", pts: 200 },
+    { text: "This country practises urban agriculture on a vast scale by necessity — organic farming became a survival strategy after fertiliser imports collapsed.", pts: 200 },
+    { text: "A single leader governed it for 47 consecutive years — longer than any other non-royal leader in the 20th or 21st century.", pts: 150 },
+    { text: "Its classic cars — American vehicles from the 1950s kept running by improvised engineering — have become one of the country's most photographed symbols.", pts: 150 },
+    { text: "The country developed a lung cancer vaccine before most developed nations — due partly to isolation forcing domestic pharmaceutical innovation.", pts: 200 },
+  ],
+
+  "Kazakhstan": [
+    { text: "This country is the world's largest landlocked nation — larger than Western Europe — yet shares a border with only five countries.", pts: 0 },
+    { text: "The world's first and largest operational spaceport is located here — it has launched more spacecraft than any other facility in history.", pts: 150 },
+    { text: "This country was the Soviet Union's nuclear testing ground — over 450 nuclear tests were conducted here between 1949 and 1989, the largest test program in history.", pts: 200 },
+    { text: "The apple likely originated here — wild apple forests still grow in its mountains and are considered the genetic ancestors of all domesticated apple varieties.", pts: 150 },
+    { text: "The country moved its capital city in 1997 from the historic south to a newly built city in the frozen north — purely as a political strategy against separatism.", pts: 200 },
+    { text: "Its steppe is the original homeland of the horse — the first domestication of horses occurred here approximately 5,500 years ago, changing human civilisation permanently.", pts: 200 },
+    { text: "The Aral Sea — once the world's fourth-largest lake — almost entirely disappeared within this country's borders due to Soviet irrigation projects diverting its feeder rivers.", pts: 200 },
+  ],
+
+  "Ghana": [
+    { text: "This country was the first in sub-Saharan Africa to gain independence from colonial rule, in 1957, under a leader who became a symbol of pan-African liberation.", pts: 0 },
+    { text: "It is the world's second-largest cocoa producer — supplying the raw ingredient for a large proportion of the world's chocolate — yet cocoa farmers often cannot afford to eat chocolate.", pts: 150 },
+    { text: "A custom here involves elaborate and whimsical coffins shaped like cars, aeroplanes, fish, and shoes — crafted to reflect the deceased's life or aspirations.", pts: 200 },
+    { text: "The country has practised peaceful democratic transfers of power repeatedly since 1992, making it one of Africa's most stable democracies.", pts: 150 },
+    { text: "It is home to the largest man-made lake in the world by surface area — created by damming a river for hydroelectric power.", pts: 150 },
+    { text: "The country was the first to declare itself a 'Year of Return' destination — inviting African diaspora descendants of enslaved people to come 'home' in 2019.", pts: 200 },
+    { text: "A Ghanaian pallbearer dancing troupe became one of the most viewed internet memes globally — their joyful dancing funeral custom went viral in 2020.", pts: 150 },
+  ],
+
+  "Hungary": [
+    { text: "This landlocked country's language is so unlike any other European language that linguists can trace its relatives only to a small group of languages spoken in Siberia and Finland.", pts: 0 },
+    { text: "The country invented the Rubik's Cube — a puzzle that has sold over 450 million units and remains the world's best-selling toy of all time.", pts: 150 },
+    { text: "It has produced more Nobel Prize winners per capita than almost any other nation — many working in physics and medicine.", pts: 150 },
+    { text: "The country was divided in two by the Ottoman Empire for 150 years — one half became a vassal state, the other part a Habsburg domain.", pts: 200 },
+    { text: "A thermal bath culture here — fed by over 1,000 natural hot springs beneath the capital — has been in continuous use since Roman times.", pts: 150 },
+    { text: "The country's parliament building — located on a river bank — is the third largest in the world and contains 691 rooms, 29 staircases, and 13 lifts.", pts: 200 },
+    { text: "A revolutionary uprising here in 1956 — crushed by Soviet tanks — became a defining symbol of anti-communist resistance, inspiring movements across the Eastern Bloc.", pts: 200 },
+  ],
+
+  "Malaysia": [
+    { text: "This country contains one of the world's oldest rainforests — 130 million years old, older than the Amazon — in its northern region.", pts: 0 },
+    { text: "It is the world's largest producer of palm oil, an ingredient found in roughly half of all packaged products on supermarket shelves globally.", pts: 150 },
+    { text: "The country has a constitutional monarchy where the position of king rotates among nine hereditary rulers every five years — a system unique in the world.", pts: 200 },
+    { text: "One of the world's most unusual fungi lives in its forests — a glowing bioluminescent mushroom that produces its own light through chemical reaction.", pts: 150 },
+    { text: "Two of the world's tallest buildings stood here from 1998 to 2004 — twin towers connected by a sky bridge 170 metres above street level.", pts: 150 },
+    { text: "The country has a road that changes country at every other traffic light — a narrow border means it technically crosses between two nations multiple times.", pts: 200 },
+    { text: "Its constitution designates one ethnic group as 'indigenous people of the land' with specific economic and political privileges — a classification that has caused decades of tension.", pts: 200 },
+  ],
+
+  "Chile": [
+    { text: "This country is the world's longest north-south country — spanning 4,300 kilometres from one of the world's driest deserts to Antarctic territory.", pts: 0 },
+    { text: "It sits atop roughly a third of the world's lithium reserves — a mineral now central to electric vehicle batteries and energy storage.", pts: 150 },
+    { text: "The world's driest non-polar desert is located here — some weather stations have recorded zero rainfall for decades.", pts: 150 },
+    { text: "A 17-day rescue operation here in 2010 — saving 33 miners trapped 700 metres underground — became the world's most watched live television event of that year.", pts: 150 },
+    { text: "The country's wine industry produces grapes in conditions so varied — from sea level to 3,000 metres altitude in the same country — that it grows more wine varieties than France.", pts: 200 },
+    { text: "A military coup here in 1973 — backed by a foreign superpower — replaced a democratically elected socialist with a dictator whose economic policies became a model for free-market reform globally.", pts: 200 },
+    { text: "The country's Pacific coastline causes an extreme condensation effect — coastal mountains collect fog so reliably that 'fog catchers' net enough water to supply villages in the driest desert on Earth.", pts: 200 },
+    { text: "Patagonia — at its southern tip — contains the world's third-largest freshwater reserve in glacial form, coveted by water-scarce nations as a future strategic resource.", pts: 200 },
+  ],
+
+  "Czech Republic": [
+    { text: "This country drinks more beer per capita than any other nation on Earth — a fact sustained by a brewing tradition over 700 years old.", pts: 0 },
+    { text: "The word 'robot' was invented here — coined by a playwright in 1920 whose science fiction depicted artificial workers revolting against their human creators.", pts: 150 },
+    { text: "Its capital city survived both World Wars largely intact, preserving a density of medieval, baroque, and art nouveau architecture found almost nowhere else in Europe.", pts: 150 },
+    { text: "A spring here in 1968 — a period of political liberalisation — was crushed by Soviet tank invasion, becoming a symbol of Cold War repression.", pts: 150 },
+    { text: "The country produced Franz Kafka — an author so distinctive that the English language adopted an adjective from his name to describe nightmarish bureaucratic situations.", pts: 200 },
+    { text: "A dissident playwright from here became president after the Velvet Revolution — transitioning the country from communism to democracy without a single act of violence.", pts: 200 },
+    { text: "The country invented contact lenses — developed by a chemist here in the 1950s who also pioneered soft lens materials still used in modern contacts.", pts: 200 },
+  ],
+
+  "Romania": [
+    { text: "This country's mediaeval region — famous in fiction as the land of vampires — was ruled by a 15th-century prince whose method of executing enemies gave rise to the legend.", pts: 0 },
+    { text: "Its internet infrastructure is among the fastest and most affordable in Europe — a product of a unique post-communist system where building cables was more practical than maintaining copper lines.", pts: 150 },
+    { text: "The country has the world's heaviest building by weight — a palace commissioned by a communist dictator, second only to the Pentagon in floor space.", pts: 150 },
+    { text: "A gymnastics tradition here produced the first athlete to be awarded a perfect score of 10 at the Olympics — a 14-year-old in 1976.", pts: 150 },
+    { text: "The country's revolution in 1989 was the only communist transition that involved violent confrontation — the dictator and his wife were tried and executed on live television on Christmas Day.", pts: 200 },
+    { text: "It has the largest surface of virgin forest in Europe — ancient primeval woodland that survived communism and is now threatened by illegal logging.", pts: 200 },
+    { text: "The country's traditional funeral is a four-day community event where a painted wooden grave marker replaces the stone — each one hand-carved with a poem about the deceased's life.", pts: 200 },
+  ],
+
+};
+
+// ─── ENGINE ───────────────────────────────────────────────────────────────────
+// Each country can be used multiple times per session with different clue combinations.
+// We track which clue INDICES have been used globally per country to avoid repeating.
+// A "question" = { answer, clues: [5 clues selected from pool] }
+
+const usedClueMap = {}; // { countryName: Set of used indices }
+
+function getUsedSet(country) {
+  if (!usedClueMap[country]) usedClueMap[country] = new Set();
+  return usedClueMap[country];
+}
+
+function pickCluesForCountry(country) {
+  const pool = CLUE_DB[country];
+  if (!pool || pool.length < 5) return null;
+  const used = getUsedSet(country);
+
+  // Reset if we've exhausted enough of the pool
+  if (pool.length - used.size < 5) {
+    usedClueMap[country] = new Set();
+  }
+
+  const available = pool.map((_, i) => i).filter(i => !usedClueMap[country].has(i));
+  const shuffled = shuffle(available);
+  const chosen = shuffled.slice(0, 5);
+  chosen.forEach(i => usedClueMap[country].add(i));
+
+  // Ensure first clue has pts:0, rest have pts>0
+  const clues = chosen.map((i, pos) => {
+    const c = pool[i];
+    if (pos === 0) return { text: c.text, pts: 0 };
+    return { text: c.text, pts: c.pts || 150 };
+  });
+  return clues;
+}
+
+function buildGameQuestions() {
+  const countries = Object.keys(CLUE_DB);
+  const shuffledCountries = shuffle(countries);
+
+  // Pick 10 unique countries, build question objects
+  const selected = shuffledCountries.slice(0, 10);
+  return selected.map(country => ({
+    answer: country,
+    clues: pickCluesForCountry(country),
+  })).filter(q => q.clues !== null);
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ─── GAME STATE ───────────────────────────────────────────────────────────────
+let questions = [];
+let currentQ = 0;
+let currentClueIdx = 0;
+let maxPts = 1000;
+let totalScore = 0;
+let attemptsLeft = 3;
+let roundOver = false;
+let gamesPlayed = 0;
+
+function initGame() {
+  questions = buildGameQuestions();
+  currentQ = 0;
+  totalScore = 0;
+  gamesPlayed++;
+  loadRound();
+}
+
+function loadRound() {
+  roundOver = false;
+  currentClueIdx = 0;
+  maxPts = 1000;
+  attemptsLeft = 3;
+
+  const q = questions[currentQ];
+  document.getElementById('roundTag').textContent = `ROUND ${String(currentQ+1).padStart(2,'0')} · IDENTIFY THE COUNTRY`;
+  document.getElementById('roundNum').textContent = `${currentQ+1}/10`;
+  document.getElementById('progressFill').style.width = `${((currentQ+1)/10)*100}%`;
+  document.getElementById('maxPoints').textContent = maxPts;
+  document.getElementById('totalScore').textContent = totalScore;
+  document.getElementById('guessInput').value = '';
+  document.getElementById('feedback').className = 'feedback';
+  document.getElementById('autocompleteList').classList.remove('show');
+  document.getElementById('hintBtn').disabled = false;
+  document.getElementById('sessionNote').textContent = gamesPlayed > 1 ? `Game #${gamesPlayed} · Clue pool: ${Object.values(usedClueMap).reduce((a,b) => a + b.size, 0)} used globally` : '';
+
+  renderClues();
+  renderAttempts();
+  updateHintCost();
+}
+
+function renderClues() {
+  const q = questions[currentQ];
+  const list = document.getElementById('clueList');
+  list.innerHTML = '';
+
+  for (let i = 0; i <= currentClueIdx; i++) {
+    const clue = q.clues[i];
+    const li = document.createElement('li');
+    li.className = 'clue-item' + (i === currentClueIdx ? ' new' : '');
+    li.innerHTML = `
+      <span class="clue-num">${String(i+1).padStart(2,'0')}</span>
+      <span class="clue-text">${clue.text}</span>
+      ${clue.pts > 0 ? `<span class="clue-deduction">−${clue.pts}</span>` : ''}
+    `;
+    list.appendChild(li);
+  }
+
+  const locked = document.getElementById('lockedClue');
+  const nextIdx = currentClueIdx + 1;
+  if (nextIdx < q.clues.length) {
+    locked.style.display = 'flex';
+    document.getElementById('nextDeduction').textContent = `−${q.clues[nextIdx].pts}`;
+  } else {
+    locked.style.display = 'none';
+  }
+}
+
+function renderAttempts() {
+  const row = document.getElementById('attemptsRow');
+  row.innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'attempt-dot' + (i >= attemptsLeft ? ' used' : ' left');
+    row.appendChild(dot);
+  }
+}
+
+function updateHintCost() {
+  const q = questions[currentQ];
+  const nextIdx = currentClueIdx + 1;
+  if (nextIdx < q.clues.length) {
+    document.getElementById('hintCost').textContent = q.clues[nextIdx].pts;
+  }
+  const hintBtn = document.getElementById('hintBtn');
+  hintBtn.disabled = (nextIdx >= q.clues.length) || roundOver;
+}
+
+function revealHint() {
+  if (roundOver) return;
+  const q = questions[currentQ];
+  const nextIdx = currentClueIdx + 1;
+  if (nextIdx >= q.clues.length) return;
+
+  const deduction = q.clues[nextIdx].pts;
+  maxPts = Math.max(0, maxPts - deduction);
+  currentClueIdx++;
+  document.getElementById('maxPoints').textContent = maxPts;
+  renderClues();
+  updateHintCost();
+}
+
+function submitGuess() {
+  if (roundOver) return;
+  const input = document.getElementById('guessInput');
+  const guess = input.value.trim();
+  if (!guess) return;
+
+  const q = questions[currentQ];
+  const fb = document.getElementById('feedback');
+  document.getElementById('autocompleteList').classList.remove('show');
+
+  if (guess.toLowerCase() === q.answer.toLowerCase()) {
+    roundOver = true;
+    totalScore += maxPts;
+    showResult(true, maxPts);
+  } else {
+    attemptsLeft--;
+    renderAttempts();
+    input.value = '';
+
+    if (attemptsLeft <= 0) {
+      roundOver = true;
+      fb.className = 'feedback wrong';
+      fb.textContent = `No attempts left. The answer was ${q.answer}.`;
+      setTimeout(() => showResult(false, 0), 1200);
+    } else {
+      fb.className = 'feedback wrong';
+      fb.textContent = `"${guess}" is incorrect. ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining.`;
+      maxPts = Math.max(0, maxPts - 100);
+      document.getElementById('maxPoints').textContent = maxPts;
+    }
+  }
+}
+
+function showResult(correct, pts) {
+  const overlay = document.getElementById('resultOverlay');
+  const q = questions[currentQ];
+
+  document.getElementById('resultEmoji').textContent = correct ? '🎉' : '😔';
+  document.getElementById('resultTitle').textContent = correct ? 'Correct!' : 'Not quite…';
+  document.getElementById('resultTitle').style.color = correct ? 'var(--accent)' : 'var(--red)';
+  document.getElementById('resultCountry').textContent = `The answer was: ${q.answer}`;
+  document.getElementById('resultPoints').textContent = correct ? `+${pts}` : `+0`;
+  document.getElementById('resultPoints').style.color = correct ? 'var(--gold)' : 'var(--text-dim)';
+  document.getElementById('totalScore').textContent = totalScore;
+
+  const cluesUsed = currentClueIdx + 1;
+  document.getElementById('resultSub').textContent = correct
+    ? `Used ${cluesUsed} clue${cluesUsed === 1 ? '' : 's'} · Running total: ${totalScore} pts`
+    : `Running total: ${totalScore} pts`;
+
+  overlay.classList.add('show');
+}
+
+function nextRound() {
+  document.getElementById('resultOverlay').classList.remove('show');
+  currentQ++;
+  if (currentQ >= questions.length) {
+    endGame();
+  } else {
+    loadRound();
+  }
+}
+
+function endGame() {
+  document.getElementById('finalScore').textContent = totalScore;
+  const ranks = [
+    [9000, '🌍 World-Class Geographer'],
+    [7000, '🗺️ Seasoned Explorer'],
+    [5000, '🧭 Curious Traveler'],
+    [3000, '📍 Decent Navigator'],
+    [0, '🌐 Keep Exploring!'],
+  ];
+  const [, label] = ranks.find(([min]) => totalScore >= min);
+  document.getElementById('finalRank').textContent = label;
+  document.getElementById('gameOverOverlay').classList.add('show');
+}
+
+function skipRound() {
+  if (roundOver) return;
+  roundOver = true;
+  showResult(false, 0);
+}
+
+function restartGame() {
+  document.getElementById('gameOverOverlay').classList.remove('show');
+  initGame();
+}
+
+// ─── AUTOCOMPLETE ─────────────────────────────────────────────────────────────
+const inputEl = document.getElementById('guessInput');
+const acList = document.getElementById('autocompleteList');
+let acActive = -1;
+
+inputEl.addEventListener('input', () => {
+  const val = inputEl.value.trim().toLowerCase();
+  acList.innerHTML = '';
+  acActive = -1;
+  if (!val || val.length < 2) { acList.classList.remove('show'); return; }
+
+  const matches = ALL_COUNTRIES.filter(c => c.toLowerCase().startsWith(val)).slice(0, 6);
+  if (!matches.length) { acList.classList.remove('show'); return; }
+
+  matches.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'autocomplete-item';
+    div.textContent = c;
+    div.addEventListener('mousedown', () => {
+      inputEl.value = c;
+      acList.classList.remove('show');
+    });
+    acList.appendChild(div);
+  });
+  acList.classList.add('show');
+});
+
+inputEl.addEventListener('keydown', (e) => {
+  const items = acList.querySelectorAll('.autocomplete-item');
+  if (e.key === 'ArrowDown') {
+    acActive = Math.min(acActive + 1, items.length - 1);
+    items.forEach((it, i) => it.classList.toggle('active', i === acActive));
+    e.preventDefault();
+  } else if (e.key === 'ArrowUp') {
+    acActive = Math.max(acActive - 1, -1);
+    items.forEach((it, i) => it.classList.toggle('active', i === acActive));
+    e.preventDefault();
+  } else if (e.key === 'Enter') {
+    if (acActive >= 0 && items[acActive]) {
+      inputEl.value = items[acActive].textContent;
+      acList.classList.remove('show');
+    } else {
+      submitGuess();
+    }
+  } else if (e.key === 'Escape') {
+    acList.classList.remove('show');
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.input-wrap')) acList.classList.remove('show');
+});
+
+// ─── GO ───────────────────────────────────────────────────────────────────────
+initGame();
+</script>
+</body>
+</html>
